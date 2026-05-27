@@ -1,0 +1,17 @@
+# Example TokenQuota — enforce a $50/month budget on the "billing-agent" ServiceAccount
+# in the "team-payments" namespace. New pod creates are denied once the budget is exceeded.
+apiVersion: kovern.io/v1alpha1
+kind: TokenQuota
+metadata:
+  name: billing-agent-quota
+  namespace: team-payments
+spec:
+  targetRef:
+    kind: ServiceAccount
+    name: billing-agent
+  billingScope:
+    currency: USD
+    maxFinancialBudget: "50"
+    renewalInterval: Monthly
+    softLimitPct: 80      # Emit a K8s Warning Event at 80% spend
+  enforcementAction: SuspendWorkload

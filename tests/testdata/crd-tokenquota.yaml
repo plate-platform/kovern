@@ -1,0 +1,135 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tokenquotas.kovern.io
+  annotations:
+    "helm.sh/resource-policy": keep
+spec:
+  group: kovern.io
+  names:
+    kind: TokenQuota
+    listKind: TokenQuotaList
+    plural: tokenquotas
+    singular: tokenquota
+    shortNames:
+      - tq
+    categories:
+      - kovern
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: State
+          type: string
+          jsonPath: .status.state
+        - name: Spent
+          type: string
+          jsonPath: .status.spentUSD
+        - name: Budget
+          type: string
+          jsonPath: .spec.billingScope.maxFinancialBudget
+        - name: Renewal
+          type: string
+          jsonPath: .spec.billingScope.renewalInterval
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [targetRef, billingScope]
+              properties:
+                targetRef:
+                  type: object
+                  required: [name]
+                  properties:
+                    kind:
+                      type: string
+                      enum: [ServiceAccount]
+                      default: ServiceAccount
+                    name:
+                      type: string
+                billingScope:
+                  type: object
+                  required: [maxFinancialBudget]
+                  properties:
+                    currency:
+                      type: string
+                      default: USD
+                    maxFinancialBudget:
+                      type: string
+                      x-kubernetes-int-or-string: true
+                    renewalInterval:
+                      type: string
+                      enum: [Hourly, Daily, Monthly]
+                      default: Monthly
+                    softLimitPct:
+                      type: integer
+                      minimum: 1
+                      maximum: 99
+                      default: 80
+                limits:
+                  type: array
+                  items:
+                    type: object
+                    required: [modelGroup]
+                    properties:
+                      modelGroup:
+                        type: string
+                      maxInputTokens:
+                        type: integer
+                        format: int64
+                      maxOutputTokens:
+                        type: integer
+                        format: int64
+                enforcementAction:
+                  type: string
+                  enum: [SuspendWorkload, ScaleToZero, Evict]
+                  default: SuspendWorkload
+            status:
+              type: object
+              properties:
+                spentUSD:
+                  type: string
+                spentTokens:
+                  type: integer
+                  format: int64
+                runCount:
+                  type: integer
+                  format: int64
+                state:
+                  type: string
+                  enum: [Active, SoftLimit, Exceeded, Suspended]
+                lastUpdated:
+                  type: string
+                  format: date-time
+                nextRenewal:
+                  type: string
+                  format: date-time
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required: [lastTransitionTime, message, reason, status, type]
+                    properties:
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      message:
+                        type: string
+                      observedGeneration:
+                        type: integer
+                        format: int64
+                      reason:
+                        type: string
+                      status:
+                        type: string
+                      type:
+                        type: string

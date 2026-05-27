@@ -1,0 +1,21 @@
+bin/
+dist/
+coverage.out
+coverage.html
+*.test
+*.swp
+
+# Secrets — never commit
+*.pem
+*.key
+*.crt
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/settings.json
+*.iml
+
+# OS
+.DS_Store

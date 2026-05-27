@@ -1,0 +1,140 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: livelockpolicies.kovern.io
+  annotations:
+    "helm.sh/resource-policy": keep
+spec:
+  group: kovern.io
+  names:
+    kind: LivelockPolicy
+    listKind: LivelockPolicyList
+    plural: livelockpolicies
+    singular: livelockpolicy
+    shortNames:
+      - llp
+    categories:
+      - kovern
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Detections
+          type: integer
+          jsonPath: .status.detectionCount
+        - name: Last Detection
+          type: date
+          jsonPath: .status.lastDetection
+        - name: Semantic
+          type: boolean
+          jsonPath: .spec.detection.semantic.enabled
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [selector, detection, remediation]
+              properties:
+                selector:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                detection:
+                  type: object
+                  properties:
+                    otel:
+                      type: object
+                      properties:
+                        maxSameToolCalls:
+                          type: integer
+                          minimum: 1
+                          default: 3
+                        windowSeconds:
+                          type: integer
+                          minimum: 5
+                          default: 60
+                        identicalResponseHash:
+                          type: boolean
+                          default: true
+                    semantic:
+                      type: object
+                      required: [enabled]
+                      properties:
+                        enabled:
+                          type: boolean
+                          default: false
+                        windowTurns:
+                          type: integer
+                          minimum: 2
+                          maximum: 10
+                          default: 3
+                        similarityThreshold:
+                          type: string
+                          default: "0.92"
+                        model:
+                          type: string
+                          default: claude-haiku-4-5-20251001
+                remediation:
+                  type: object
+                  properties:
+                    action:
+                      type: string
+                      enum: [InjectFault, EvictPod, SuspendWorkload]
+                      default: InjectFault
+                    faultConfig:
+                      type: object
+                      properties:
+                        httpStatusCode:
+                          type: integer
+                          default: 429
+                        duration:
+                          type: string
+                          default: "60s"
+                    fallbackAction:
+                      type: string
+                      enum: [EvictPod, SuspendWorkload]
+                      default: EvictPod
+                    emitEvent:
+                      type: boolean
+                      default: true
+                    gitopsIncident:
+                      type: boolean
+                      default: false
+            status:
+              type: object
+              properties:
+                detectionCount:
+                  type: integer
+                  format: int64
+                lastDetection:
+                  type: string
+                  format: date-time
+                lastAffectedPod:
+                  type: string
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required: [lastTransitionTime, message, reason, status, type]
+                    properties:
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      message:
+                        type: string
+                      observedGeneration:
+                        type: integer
+                        format: int64
+                      reason:
+                        type: string
+                      status:
+                        type: string
+                      type:
+                        type: string

@@ -1,0 +1,30 @@
+# Example LivelockPolicy — detect looping agents in the "team-payments" namespace.
+# Phase 1: heuristic detection only (no Claude API key required).
+# Phase 2: uncomment spec.detection.semantic to enable Claude-based detection.
+apiVersion: kovern.io/v1alpha1
+kind: LivelockPolicy
+metadata:
+  name: payments-loop-guard
+  namespace: team-payments
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: agent
+  detection:
+    otel:
+      maxSameToolCalls: 3    # Same tool called 3+ times in the window → loop
+      windowSeconds: 60
+      identicalResponseHash: true
+    # semantic:                # Uncomment + set ANTHROPIC_API_KEY to enable
+    #   enabled: true
+    #   windowTurns: 3
+    #   similarityThreshold: "0.92"
+    #   model: claude-haiku-4-5-20251001
+  remediation:
+    action: InjectFault        # Return HTTP 429 first (graceful loop break)
+    faultConfig:
+      httpStatusCode: 429
+      duration: "60s"
+    fallbackAction: EvictPod   # Evict if fault injection doesn't stop the loop
+    emitEvent: true            # Write a K8s Warning Event on detection
+    gitopsIncident: false

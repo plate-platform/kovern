@@ -1,0 +1,18 @@
+apiVersion: v2
+name: kovern
+description: Kubernetes-native AI agent governance operator
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - ai-governance
+  - kubernetes
+  - operator
+  - ai-agents
+  - admission-webhook
+home: https://github.com/plate-platform/kovern
+sources:
+  - https://github.com/plate-platform/kovern
+maintainers:
+  - name: plate-platform
+    url: https://github.com/plate-platform

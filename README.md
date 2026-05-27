@@ -1,6 +1,8 @@
-# Kovern
+<p align="center">
+  <img src="assets/logo.svg" alt="Kovern" width="320"/>
+</p>
 
-Kubernetes-native governance operator for AI agent workloads.
+<p align="center">Kubernetes-native governance operator for AI agent workloads.</p>
 
 Kovern adds two controls to the Kubernetes API for agent workloads:
 

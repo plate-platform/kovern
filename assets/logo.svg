@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 80" width="380" height="80">
+  <defs>
+    <!-- Shield background gradient -->
+    <linearGradient id="shieldGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <!-- K arms gradient: cyan → indigo -->
+    <linearGradient id="armGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+    <!-- Shield border gradient -->
+    <linearGradient id="borderGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.9"/>
+      <stop offset="60%" stop-color="#818cf8" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#818cf8" stop-opacity="0.1"/>
+    </linearGradient>
+    <!-- Wordmark gradient -->
+    <linearGradient id="textGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#cbd5e1"/>
+    </linearGradient>
+    <!-- Glow filter -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Drop shadow -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#38bdf8" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+
+  <!-- ── Icon (shield, 58×69 scaled to fit 80px tall with padding) ── -->
+  <!-- Translate to center vertically: (80 - 69) / 2 = 5.5 → y=5.5 -->
+  <g transform="translate(8, 5.5) scale(0.363)">
+    <!-- Shield body -->
+    <path d="M 14,22 Q 14,10 26,10 L 134,10 Q 146,10 146,22 L 146,108 Q 146,153 80,187 Q 14,153 14,108 Z"
+          fill="url(#shieldGrad)"
+          filter="url(#shadow)"/>
+    <!-- Shield border -->
+    <path d="M 14,22 Q 14,10 26,10 L 134,10 Q 146,10 146,22 L 146,108 Q 146,153 80,187 Q 14,153 14,108 Z"
+          fill="none"
+          stroke="url(#borderGrad)"
+          stroke-width="2.5"/>
+    <!-- Inner highlight -->
+    <path d="M 26,13 L 134,13 Q 143,13 143,22 L 143,30 Q 90,24 17,30 L 17,22 Q 17,13 26,13 Z"
+          fill="white" fill-opacity="0.06"/>
+    <!-- K vertical bar -->
+    <line x1="52" y1="50" x2="52" y2="148"
+          stroke="white" stroke-width="18" stroke-linecap="round"/>
+    <!-- K upper arm -->
+    <line x1="62" y1="97" x2="116" y2="50"
+          stroke="url(#armGrad)" stroke-width="15" stroke-linecap="round"/>
+    <!-- K lower arm -->
+    <line x1="62" y1="97" x2="116" y2="148"
+          stroke="url(#armGrad)" stroke-width="15" stroke-linecap="round"/>
+    <!-- Accent nodes -->
+    <circle cx="116" cy="50" r="6" fill="#38bdf8" filter="url(#glow)"/>
+    <circle cx="116" cy="50" r="3" fill="white"/>
+    <circle cx="116" cy="148" r="6" fill="#818cf8" filter="url(#glow)"/>
+    <circle cx="116" cy="148" r="3" fill="white"/>
+    <circle cx="62" cy="97" r="5" fill="white" fill-opacity="0.6" filter="url(#glow)"/>
+  </g>
+
+  <!-- ── Wordmark "kovern" ── -->
+  <!-- Baseline at y=52 (visually centred in 80px height) -->
+  <text x="78" y="53"
+        font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif"
+        font-weight="700"
+        font-size="38"
+        letter-spacing="-0.5"
+        fill="url(#textGrad)">kovern</text>
+
+  <!-- Tagline -->
+  <text x="79" y="70"
+        font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif"
+        font-weight="400"
+        font-size="11"
+        letter-spacing="2.5"
+        fill="#64748b">K8S AGENT GOVERNANCE</text>
+</svg>

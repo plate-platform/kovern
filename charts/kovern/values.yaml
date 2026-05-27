@@ -1,0 +1,79 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/plate-platform/kovern
+  pullPolicy: IfNotPresent
+  tag: ""  # Defaults to Chart.appVersion
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Anthropic API key for Claude semantic livelock detection.
+# Only required if you set spec.detection.semantic.enabled: true in a LivelockPolicy.
+anthropic:
+  apiKeySecret:
+    name: ""       # Name of the Secret containing the API key
+    key: "api-key" # Key within the Secret
+
+operator:
+  leaderElect: false
+  metricsPort: 8080
+  healthPort: 8081
+  logLevel: info
+
+webhook:
+  port: 9443
+  # failurePolicy controls what happens when the webhook is unreachable.
+  # "Ignore" = fail-open (recommended for day-1 deployments)
+  # "Fail"   = fail-closed (use once operator is stable)
+  failurePolicy: Ignore
+  timeoutSeconds: 5
+  # caBundle is the base64-encoded CA cert used to verify the webhook server's TLS cert.
+  # Set by `make local-deploy` from the self-signed CA.
+  # In production, managed by cert-manager (inject-ca-from annotation).
+  caBundle: ""
+  # Namespaces matching this selector are excluded from webhook enforcement.
+  # kovern-system is always excluded to prevent the operator from blocking itself.
+  namespaceSelector:
+    matchExpressions:
+      - key: kovern.io/exclude
+        operator: DoesNotExist
+
+# TLS for the webhook server.
+# Kovern generates a self-signed cert at startup when tls.selfSigned=true.
+# For production, provide a cert-manager Certificate or mount a Secret manually.
+tls:
+  selfSigned: true
+  certDir: /tmp/k8s-webhook-server/serving-certs
+  secretName: kovern-webhook-tls  # Only used when selfSigned=false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false  # false: cert generation writes to certDir
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
