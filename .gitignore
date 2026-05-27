@@ -9,8 +9,11 @@ coverage.html
 *.pem
 *.key
 *.crt
+*.csr
+*.srl
 .env
 .env.*
+scripts/certs/
 
 # IDE
 .idea/

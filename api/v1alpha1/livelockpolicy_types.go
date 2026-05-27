@@ -22,7 +22,7 @@ type DetectionCriteria struct {
 	// +optional
 	OTel *OTelCriteria `json:"otel,omitempty"`
 
-	// Semantic enables Claude-powered semantic similarity detection (optional, requires API key).
+	// Semantic enables LLM-powered semantic similarity detection (optional, requires an API key).
 	// +optional
 	Semantic *SemanticCriteria `json:"semantic,omitempty"`
 }
@@ -46,12 +46,28 @@ type OTelCriteria struct {
 	IdenticalResponseHash bool `json:"identicalResponseHash,omitempty"`
 }
 
-// SemanticCriteria configures Claude-based semantic livelock detection.
-// Requires ANTHROPIC_API_KEY to be set in the operator environment.
+// DetectorProvider selects the LLM backend used for semantic detection.
+// +kubebuilder:validation:Enum=Anthropic;Gemini
+type DetectorProvider string
+
+const (
+	ProviderAnthropic DetectorProvider = "Anthropic"
+	ProviderGemini    DetectorProvider = "Gemini"
+)
+
+// SemanticCriteria configures LLM-based semantic livelock detection.
+// Requires the API key for the selected Provider to be set in the operator environment.
 type SemanticCriteria struct {
 	// Enabled activates semantic detection. Disabled by default to avoid API costs.
 	// +kubebuilder:default=false
 	Enabled bool `json:"enabled"`
+
+	// Provider selects which LLM backend to use. Defaults to Anthropic.
+	// Anthropic requires ANTHROPIC_API_KEY; Gemini requires GOOGLE_API_KEY.
+	// +kubebuilder:validation:Enum=Anthropic;Gemini
+	// +kubebuilder:default=Anthropic
+	// +optional
+	Provider string `json:"provider,omitempty"`
 
 	// WindowTurns is the number of recent agent turns to analyse. Defaults to 3.
 	// +kubebuilder:default=3

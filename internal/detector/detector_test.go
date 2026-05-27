@@ -1,15 +1,15 @@
-package claude_test
+package detector_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/plate-platform/kovern/api/v1alpha1"
-	"github.com/plate-platform/kovern/internal/claude"
+	"github.com/plate-platform/kovern/internal/detector"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// mockDetector is a test double for claude.Detector.
+// mockDetector is a test double for detector.Detector.
 type mockDetector struct {
 	livelock bool
 	reason   string
@@ -20,32 +20,35 @@ func (m *mockDetector) IsLivelocked(_ context.Context, _ []string, _ *v1alpha1.L
 	return m.livelock, m.reason, m.err
 }
 
-// Ensure mockDetector satisfies the interface — compile-time check.
-var _ claude.Detector = (*mockDetector)(nil)
+// Compile-time interface check.
+var _ detector.Detector = (*mockDetector)(nil)
 
-func makePolicySpec(enabled bool, turns int) *v1alpha1.LivelockPolicySpec {
-	semantic := &v1alpha1.SemanticCriteria{
-		Enabled:             enabled,
-		WindowTurns:         turns,
-		SimilarityThreshold: "0.92",
-		Model:               "claude-haiku-4-5-20251001",
-	}
+func makePolicySpec(provider string, model string, enabled bool, turns int) *v1alpha1.LivelockPolicySpec {
 	return &v1alpha1.LivelockPolicySpec{
 		Selector: metav1.LabelSelector{},
 		Detection: v1alpha1.DetectionCriteria{
-			Semantic: semantic,
+			Semantic: &v1alpha1.SemanticCriteria{
+				Enabled:             enabled,
+				Provider:            provider,
+				Model:               model,
+				WindowTurns:         turns,
+				SimilarityThreshold: "0.92",
+			},
 		},
 		Remediation: v1alpha1.RemediationSpec{
-			Action:     v1alpha1.RemediationInjectFault,
-			EmitEvent:  true,
-			FaultConfig: &v1alpha1.FaultConfig{HTTPStatusCode: 429, Duration: "60s"},
+			Action:    v1alpha1.RemediationInjectFault,
+			EmitEvent: true,
+			FaultConfig: &v1alpha1.FaultConfig{
+				HTTPStatusCode: 429,
+				Duration:       "60s",
+			},
 		},
 	}
 }
 
 func TestMockDetector_LivelockDetected(t *testing.T) {
 	d := &mockDetector{livelock: true, reason: "same tool called repeatedly"}
-	spec := makePolicySpec(true, 3)
+	spec := makePolicySpec("Anthropic", "claude-haiku-4-5-20251001", true, 3)
 
 	turns := []string{
 		`tool=search_web args={"query":"current weather"}`,
@@ -67,7 +70,7 @@ func TestMockDetector_LivelockDetected(t *testing.T) {
 
 func TestMockDetector_NoLivelock(t *testing.T) {
 	d := &mockDetector{livelock: false}
-	spec := makePolicySpec(true, 3)
+	spec := makePolicySpec("Anthropic", "claude-haiku-4-5-20251001", true, 3)
 
 	turns := []string{
 		`tool=search_web args={"query":"weather London"}`,
@@ -84,15 +87,9 @@ func TestMockDetector_NoLivelock(t *testing.T) {
 	}
 }
 
-func TestMockDetector_DisabledSemantic_NotCalled(t *testing.T) {
-	called := false
-	d := &mockDetector{}
-	_ = d // We test via the NoOpDetector for the disabled path
-
-	// Use a real AnthropicDetector is not feasible in unit tests (needs API key),
-	// so verify the disabled path through a no-op stub instead.
-	noOp := claude.NewNoOpDetector()
-	spec := makePolicySpec(false, 3) // semantic disabled
+func TestNoOpDetector_DisabledSemantic(t *testing.T) {
+	noOp := detector.NewNoOpDetector()
+	spec := makePolicySpec("Anthropic", "claude-haiku-4-5-20251001", false, 3)
 
 	ok, _, err := noOp.IsLivelocked(context.Background(), []string{"turn1", "turn2"}, spec)
 	if err != nil {
@@ -101,14 +98,12 @@ func TestMockDetector_DisabledSemantic_NotCalled(t *testing.T) {
 	if ok {
 		t.Fatal("expected no livelock when semantic detection is disabled")
 	}
-	_ = called
 }
 
-func TestMockDetector_TooFewTurns(t *testing.T) {
-	noOp := claude.NewNoOpDetector()
-	spec := makePolicySpec(true, 3)
+func TestNoOpDetector_TooFewTurns(t *testing.T) {
+	noOp := detector.NewNoOpDetector()
+	spec := makePolicySpec("Anthropic", "claude-haiku-4-5-20251001", true, 3)
 
-	// Only 1 turn — not enough to detect livelock
 	ok, _, err := noOp.IsLivelocked(context.Background(), []string{"single turn"}, spec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -118,9 +113,9 @@ func TestMockDetector_TooFewTurns(t *testing.T) {
 	}
 }
 
-func TestMockDetector_Error(t *testing.T) {
+func TestMockDetector_ErrorPropagated(t *testing.T) {
 	d := &mockDetector{err: context.DeadlineExceeded}
-	spec := makePolicySpec(true, 3)
+	spec := makePolicySpec("Gemini", "gemini-2.0-flash", true, 3)
 
 	_, _, err := d.IsLivelocked(context.Background(), []string{"t1", "t2"}, spec)
 	if err == nil {

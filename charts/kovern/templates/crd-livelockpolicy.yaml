@@ -83,6 +83,11 @@ spec:
                         model:
                           type: string
                           default: claude-haiku-4-5-20251001
+                        provider:
+                          type: string
+                          enum: [Anthropic, Gemini]
+                          default: Anthropic
+
                 remediation:
                   type: object
                   properties:

@@ -1,10 +1,12 @@
-// Package claude provides semantic livelock detection backed by the Anthropic API.
-// The Detector interface lets callers swap in a mock without a live API key.
-package claude
+// Package detector provides semantic livelock detection for AI agent workloads.
+// The Detector interface is provider-agnostic; callers pick Anthropic or Gemini
+// via the SemanticCriteria.Provider field, or inject a NoOpDetector for tests.
+package detector
 
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -17,7 +19,25 @@ type Detector interface {
 	IsLivelocked(ctx context.Context, turns []string, spec *v1alpha1.LivelockPolicySpec) (bool, string, error)
 }
 
-// NoOpDetector always returns false. Useful in tests and when semantic detection is disabled.
+// NewFromSpec returns the Detector appropriate for the policy's semantic config.
+// Returns NoOpDetector when semantic detection is disabled or cfg is nil.
+func NewFromSpec(cfg *v1alpha1.SemanticCriteria) (Detector, error) {
+	if cfg == nil || !cfg.Enabled {
+		return NewNoOpDetector(), nil
+	}
+	switch cfg.Provider {
+	case string(v1alpha1.ProviderGemini):
+		key := os.Getenv("GOOGLE_API_KEY")
+		if key == "" {
+			return nil, fmt.Errorf("detector: GOOGLE_API_KEY not set for Gemini provider")
+		}
+		return NewGemini(key)
+	default: // Anthropic
+		return New(), nil
+	}
+}
+
+// NoOpDetector always returns false. Used in tests and when semantic detection is disabled.
 type NoOpDetector struct{}
 
 func NewNoOpDetector() *NoOpDetector { return &NoOpDetector{} }
@@ -50,8 +70,6 @@ func NewWithClient(c *anthropic.Client) *AnthropicDetector {
 }
 
 // IsLivelocked asks Claude whether a sequence of agent turns is a semantic loop.
-// Returns (true, reason, nil) when a livelock is detected.
-// Returns (false, "", nil) without calling the API when semantic detection is disabled.
 func (d *AnthropicDetector) IsLivelocked(ctx context.Context, turns []string, spec *v1alpha1.LivelockPolicySpec) (bool, string, error) {
 	if spec.Detection.Semantic == nil || !spec.Detection.Semantic.Enabled {
 		return false, "", nil
@@ -81,21 +99,13 @@ func (d *AnthropicDetector) IsLivelocked(ctx context.Context, turns []string, sp
 		},
 	})
 	if err != nil {
-		return false, "", fmt.Errorf("claude livelock check failed: %w", err)
+		return false, "", fmt.Errorf("anthropic livelock check failed: %w", err)
 	}
 	if len(msg.Content) == 0 {
-		return false, "", fmt.Errorf("empty response from Claude")
+		return false, "", fmt.Errorf("empty response from Anthropic")
 	}
 
-	response := strings.TrimSpace(msg.Content[0].Text)
-	upper := strings.ToUpper(response)
-
-	if strings.HasPrefix(upper, "LIVELOCK:YES") {
-		reason := strings.TrimSpace(strings.TrimPrefix(response, "LIVELOCK:YES"))
-		reason = strings.TrimSpace(strings.TrimPrefix(reason, "|"))
-		return true, reason, nil
-	}
-	return false, "", nil
+	return parseResponse(strings.TrimSpace(msg.Content[0].Text))
 }
 
 const livelockSystemPrompt = `You are a livelock detector for AI agent systems running on Kubernetes.
@@ -115,4 +125,15 @@ func buildPrompt(turns []string, threshold string) string {
 	}
 	b.WriteString("Is this agent stuck in a livelock?")
 	return b.String()
+}
+
+// parseResponse interprets a model response in LIVELOCK:YES|NO format.
+func parseResponse(response string) (bool, string, error) {
+	upper := strings.ToUpper(response)
+	if strings.HasPrefix(upper, "LIVELOCK:YES") {
+		reason := strings.TrimSpace(strings.TrimPrefix(response, "LIVELOCK:YES"))
+		reason = strings.TrimSpace(strings.TrimPrefix(reason, "|"))
+		return true, reason, nil
+	}
+	return false, "", nil
 }
