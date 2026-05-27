@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Generates a self-signed CA + webhook server cert for local development.
-# Outputs files to scripts/certs/ and creates the kovern-webhook-tls Secret.
-# Usage: bash scripts/gen-certs.sh [namespace]
+# Outputs files to hack/certs/ and creates the kovern-webhook-tls Secret.
+# Usage: bash hack/gen-certs.sh [namespace]
 set -euo pipefail
 
 NAMESPACE="${1:-kovern-system}"
 SERVICE="kovern-webhook"
-CERT_DIR="scripts/certs"
+CERT_DIR="hack/certs"
 
 mkdir -p "$CERT_DIR"
 

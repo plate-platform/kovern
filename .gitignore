@@ -13,7 +13,7 @@ coverage.html
 *.srl
 .env
 .env.*
-scripts/certs/
+hack/certs/
 
 # IDE
 .idea/

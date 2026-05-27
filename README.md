@@ -4,6 +4,13 @@
 
 <p align="center">Kubernetes-native governance operator for AI agent workloads.</p>
 
+<p align="center">
+  <a href="https://github.com/plate-platform/kovern/actions/workflows/ci.yml"><img src="https://github.com/plate-platform/kovern/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache 2.0"/></a>
+  <img src="https://img.shields.io/badge/go-1.26+-00ADD8.svg" alt="Go 1.26+"/>
+  <img src="https://img.shields.io/badge/k8s-1.29+-326CE5.svg?logo=kubernetes&logoColor=white" alt="Kubernetes 1.29+"/>
+</p>
+
 Kovern adds two controls to the Kubernetes API for agent workloads:
 
 1. **Admission-level budget enforcement** — a `ValidatingAdmissionWebhook` that rejects over-budget pod creates at the Kubernetes API, before scheduling, regardless of the agent's SDK or framework.
@@ -304,7 +311,7 @@ kovern/
 │       └── detector.go           Detector interface + AnthropicDetector + NoOpDetector
 ├── charts/kovern/                Helm chart (CRDs, Deployment, RBAC, WebhookConfiguration)
 ├── docs/adr/                     Architecture Decision Records
-└── scripts/
+└── hack/
     ├── gen-certs.sh              self-signed cert generation for local dev
     └── gen-local-values.sh       generate Helm values for local cluster deploy
 ```
