@@ -1,0 +1,51 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - errcheck       # unchecked error returns
+    - govet          # go vet checks
+    - staticcheck    # SA/S1/QF semantic analysis
+    - gosec          # OWASP security rules
+    - gocritic       # opinionated style + perf
+    - misspell       # spelling in comments and strings
+    - revive         # configurable lint rules (replaces golint)
+    - gocyclo        # cyclomatic complexity
+    - dupl           # duplicate code blocks
+
+  settings:
+    gocyclo:
+      min-complexity: 15
+
+    gosec:
+      includes:
+        - G101  # hardcoded credentials
+        - G204  # subprocess launched with variable
+        - G401  # weak cryptographic primitive
+        - G402  # TLS InsecureSkipVerify set to true
+        - G403  # weak RSA key length
+        - G404  # weak random number generator
+        - G501  # import of weak crypto package
+
+    dupl:
+      threshold: 100
+
+    revive:
+      rules:
+        - name: exported
+          severity: warning
+        - name: unused-parameter
+          severity: warning
+
+  exclusions:
+    generated: lax
+    paths:
+      - "zz_generated_deepcopy\\.go"
+    rules:
+      - path: "_test\\.go"
+        linters: [dupl, gocyclo, gosec]
+      - path: "tests/"
+        linters: [dupl, gocyclo]

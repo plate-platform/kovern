@@ -263,34 +263,22 @@ Then set `spec.detection.semantic.enabled: true` in your `LivelockPolicy`.
 
 ## Local development
 
+See [docs/development.md](docs/development.md) for the full guide — prerequisites, first-time setup, running tests, code quality tools, and local cluster deployment.
+
+Quick reference:
+
 ```bash
-# Run tests (no cluster, no API keys needed)
+# One-time tool install (golangci-lint, trivy, govulncheck, kubeconform)
+make dev-setup
+
+# Unit tests — no cluster needed
 make test
 
-# Run with coverage report
-make test-coverage
-
-# Run operator locally against current kubeconfig context (no webhook)
-make run
-
-# Build binary
-make build
-
-# Build + load Docker image into Docker Desktop
-make local-image-load
-
-# Full local deploy (build → certs → helm install)
+# Full local deploy (build → certs → helm install on Docker Desktop)
 make local-deploy
 
-# Tear down
-make local-clean
-```
-
-### Re-deploying after code changes
-
-```bash
-make local-image-load   # rebuild + import into Docker Desktop
-kubectl rollout restart deployment/kovern -n kovern-system
+# Lint + vuln scan + trivy + helm-validate in one shot
+make security
 ```
 
 ---

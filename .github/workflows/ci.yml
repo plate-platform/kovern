@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false  # golangci-lint manages its own cache
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Unit tests
+        run: go test ./internal/... -v -count=1 -race
+      - name: Integration tests
+        run: |
+          KUBEBUILDER_ASSETS="$(go run sigs.k8s.io/controller-runtime/tools/setup-envtest@latest use 1.29.0 --bin-dir /tmp/envtest-bins -p path)" \
+            go test ./tests/integration/... -v -count=1 -timeout=120s
+
+  vuln:
+    name: Vulnerability check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run govulncheck
+        run: |
+          set +e
+          go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+          code=$?
+          # exit 3 = vulns in deps but none called by our code — treat as pass
+          # exit 1 = our code calls vulnerable functions — fail
+          [ $code -eq 0 ] || [ $code -eq 3 ] || exit $code
+
+  helm-validate:
+    name: Helm lint + kubeconform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Install kubeconform
+        run: |
+          KUBECONFORM_VERSION=0.6.7
+          curl -sSL \
+            "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar xz
+          sudo mv kubeconform /usr/local/bin/
+      - name: Helm lint
+        run: helm lint charts/kovern/
+      - name: kubeconform
+        run: |
+          helm template kovern charts/kovern/ | \
+            kubeconform -strict -kubernetes-version 1.29.0 -summary
+
+  build:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: kovern:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

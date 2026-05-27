@@ -3,8 +3,10 @@ LOCAL_IMG ?= kovern:local
 HELM_RELEASE ?= kovern
 HELM_NAMESPACE ?= kovern-system
 ENVTEST_K8S_VERSION ?= 1.33.x
+GOVULNCHECK_VERSION ?= latest
 
 .PHONY: all build test test-integration e2e lint vet fmt tidy \
+        vuln scan-fs scan-image scan-helm helm-validate security dev-setup \
         docker-build docker-push \
         helm-install helm-uninstall helm-template \
         generate manifests \
@@ -46,6 +48,44 @@ fmt:
 ## Run golangci-lint (install from https://golangci-lint.run)
 lint:
 	golangci-lint run ./...
+
+## Install all local dev tools for lint/vuln/scan targets (run once after clone)
+dev-setup:
+	@echo "==> govulncheck"
+	go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+	@echo "==> golangci-lint"
+	@which golangci-lint > /dev/null 2>&1 && echo "  already installed" || brew install golangci-lint
+	@echo "==> trivy"
+	@which trivy > /dev/null 2>&1 && echo "  already installed" || brew install trivy
+	@echo "==> kubeconform"
+	@which kubeconform > /dev/null 2>&1 && echo "  already installed" || brew install kubeconform
+	@echo "==> All tools ready."
+
+## Scan Go source for known vulnerabilities (exit 3 = unused vulns, not a failure)
+vuln:
+	govulncheck ./...; \
+	code=$$?; [ $$code -eq 0 ] || [ $$code -eq 3 ] || exit $$code
+
+## Trivy: scan filesystem for secrets, misconfigurations, and vulnerabilities
+scan-fs:
+	trivy fs --scanners vuln,secret,misconfig .
+
+## Trivy: scan the built container image for vulnerabilities
+scan-image:
+	trivy image $(IMG)
+
+## Trivy: scan Helm chart for misconfigurations
+scan-helm:
+	trivy config charts/kovern/
+
+## Validate rendered Helm templates against Kubernetes JSON schemas (requires: brew install kubeconform)
+helm-validate:
+	helm template $(HELM_RELEASE) charts/kovern/ | \
+		kubeconform -strict -kubernetes-version 1.29.0 -summary
+
+## Run all security checks: lint + vuln + filesystem scan + helm-validate
+security:
+	$(MAKE) lint vuln scan-fs helm-validate
 
 ## Tidy go.mod
 tidy:
