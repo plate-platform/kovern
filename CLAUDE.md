@@ -92,3 +92,13 @@ Examples:
 - `feat(webhook): deny pod creates when quota exceeded`
 - `fix(ledger): fix race condition in concurrent RecordSpend`
 - `test(webhook): add soft-limit warning assertion`
+
+## Architecture Decision Records
+
+Consult these before making structural changes — they capture constraints and
+trade-offs that are not obvious from the code alone.
+
+@docs/adr/001-controller-runtime.md
+@docs/adr/002-serviceaccount-scope.md
+@docs/adr/003-in-memory-ledger-cache.md
+@docs/adr/004-claude-semantic-detector.md

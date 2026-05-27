@@ -124,7 +124,7 @@ run:
 
 ## Generate deep copy functions (requires controller-gen)
 generate:
-	controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	controller-gen object:headerFile="scripts/boilerplate.go.txt" paths="./..."
 
 ## Generate CRD manifests (requires controller-gen)
 manifests:
@@ -142,14 +142,14 @@ local-image-load: local-image
 ## Generate self-signed certs, create Secret, and deploy on local cluster (Docker Desktop)
 local-deploy: local-image-load
 	@echo "=== Generating certs and creating Secret ==="
-	bash hack/gen-certs.sh $(HELM_NAMESPACE)
+	bash scripts/gen-certs.sh $(HELM_NAMESPACE)
 	@echo "=== Patching namespace for Helm ownership ==="
 	kubectl label namespace $(HELM_NAMESPACE) app.kubernetes.io/managed-by=Helm --overwrite || true
 	kubectl annotate namespace $(HELM_NAMESPACE) \
 		meta.helm.sh/release-name=$(HELM_RELEASE) \
 		meta.helm.sh/release-namespace=$(HELM_NAMESPACE) --overwrite || true
 	@echo "=== Installing Helm chart ==="
-	bash hack/gen-local-values.sh
+	bash scripts/gen-local-values.sh
 	helm upgrade --install $(HELM_RELEASE) ./charts/kovern \
 		--namespace $(HELM_NAMESPACE) \
 		--create-namespace \
@@ -160,7 +160,7 @@ local-deploy: local-image-load
 local-clean:
 	helm uninstall $(HELM_RELEASE) --namespace $(HELM_NAMESPACE) || true
 	kubectl delete namespace $(HELM_NAMESPACE) --ignore-not-found
-	rm -rf hack/certs/
+	rm -rf scripts/certs/
 
 ## Print help
 help:

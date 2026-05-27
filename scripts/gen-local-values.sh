@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Generates /tmp/kovern-local-values.yaml for make local-deploy.
-# Usage: bash hack/gen-local-values.sh
+# Usage: bash scripts/gen-local-values.sh
 set -euo pipefail
 
-CA_BUNDLE=$(sed 's/^CA_BUNDLE=//' hack/certs/ca-bundle.env)
+CA_BUNDLE=$(sed 's/^CA_BUNDLE=//' scripts/certs/ca-bundle.env)
 
 cat > /tmp/kovern-local-values.yaml <<EOF
 image:

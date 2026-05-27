@@ -304,8 +304,9 @@ kovern/
 │       └── detector.go           Detector interface + AnthropicDetector + NoOpDetector
 ├── charts/kovern/                Helm chart (CRDs, Deployment, RBAC, WebhookConfiguration)
 ├── docs/adr/                     Architecture Decision Records
-└── hack/
-    └── gen-certs.sh              self-signed cert generation for local dev
+└── scripts/
+    ├── gen-certs.sh              self-signed cert generation for local dev
+    └── gen-local-values.sh       generate Helm values for local cluster deploy
 ```
 
 Key design invariants:
