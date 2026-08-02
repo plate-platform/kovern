@@ -36,6 +36,7 @@ spec:
             - --webhook-port={{ .Values.webhook.port }}
             - --cert-dir={{ .Values.tls.certDir }}
             - --leader-elect={{ .Values.operator.leaderElect }}
+            - --otlp-addr=:{{ .Values.otlp.port }}
           ports:
             - name: webhook
               containerPort: {{ .Values.webhook.port }}
@@ -43,14 +44,22 @@ spec:
             - name: metrics
               containerPort: {{ .Values.operator.metricsPort }}
               protocol: TCP
+            - name: otlp
+              containerPort: {{ .Values.otlp.port }}
+              protocol: TCP
           env:
-            {{- if .Values.anthropic.apiKeySecret.name }}
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.anthropic.apiKeySecret.name }}
+                  name: {{ .Values.anthropic.apiKeySecret.name | default "kovern-api-keys" }}
                   key: {{ .Values.anthropic.apiKeySecret.key }}
-            {{- end }}
+                  optional: true
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.google.apiKeySecret.name | default "kovern-api-keys" }}
+                  key: {{ .Values.google.apiKeySecret.key }}
+                  optional: true
           livenessProbe:
             httpGet:
               path: /healthz
