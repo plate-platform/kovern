@@ -10,5 +10,8 @@ spec:
     - port: 443
       targetPort: {{ .Values.webhook.port }}
       name: webhook
+    - port: {{ .Values.otlp.port }}
+      targetPort: {{ .Values.otlp.port }}
+      name: otlp
   selector:
     {{- include "kovern.selectorLabels" . | nindent 4 }}
