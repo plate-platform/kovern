@@ -15,11 +15,22 @@ serviceAccount:
   name: ""
 
 # Anthropic API key for Claude semantic livelock detection.
-# Only required if you set spec.detection.semantic.enabled: true in a LivelockPolicy.
+# Only required if you set spec.detection.semantic.enabled: true with provider: Anthropic.
 anthropic:
   apiKeySecret:
     name: ""       # Name of the Secret containing the API key
     key: "api-key" # Key within the Secret
+
+# Google API key for Gemini semantic livelock detection.
+# Only required if you set spec.detection.semantic.enabled: true with provider: Gemini.
+google:
+  apiKeySecret:
+    name: ""       # Name of the Secret containing the API key
+    key: "api-key" # Key within the Secret
+
+# OTLP/HTTP receiver — accepts span batches from agent pods for heuristic detection.
+otlp:
+  port: 4318
 
 operator:
   leaderElect: false

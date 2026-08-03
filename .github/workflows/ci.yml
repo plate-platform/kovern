@@ -59,8 +59,8 @@ jobs:
     name: Helm lint + kubeconform
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: azure/setup-helm@v4
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v5
       - name: Install kubeconform
         run: |
           KUBECONFORM_VERSION=0.6.7
@@ -82,7 +82,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: docker/setup-buildx-action@v4
       - name: Build image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: false

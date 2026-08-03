@@ -1,0 +1,146 @@
+# ── SCENARIO C: LIVELOCK DETECTION (Phase 2) ─────────────────────────────────
+#
+# A Deployment that continuously emits identical "check_payment" tool-call spans
+# to the Kovern OTLP receiver. Within one window (30 s) it sends enough
+# identical calls to cross the billing-agent-loop-guard threshold (3 calls).
+#
+# Kovern detects the loop, evicts the pod, and increments the detection counter
+# on the LivelockPolicy status. Because this is a Deployment the pod restarts —
+# demonstrating the cycle. Scale to 0 to stop it.
+#
+# Expected outcome:
+#   heuristic engine:   detects 3+ check_payment calls in 30 s
+#   remediation:        pod evicted (EvictPod fallback from InjectFault)
+#   LivelockPolicy:     status.detectionCount increments, lastDetection updated
+#
+# Apply: kubectl apply -f 03-span-emitter.yaml
+#
+# Watch detection:
+#   kubectl get llp billing-agent-loop-guard -n kovern-demo -w
+#   kubectl logs -n kovern-system -l app.kubernetes.io/name=kovern -f
+#
+# Stop the loop:
+#   kubectl scale deployment loop-emitter -n kovern-demo --replicas=0
+#
+# Teardown:
+#   kubectl delete -f 03-span-emitter.yaml
+# -----------------------------------------------------------------------------
+
+# Python script that sends one looping tool-call span every 3 seconds.
+# Uses only Python stdlib — no extra packages needed.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: span-emitter-script
+  namespace: kovern-demo
+data:
+  emit.py: |
+    import json, os, time, urllib.request, urllib.error
+
+    OTLP = os.environ.get("OTLP_ENDPOINT",
+           "http://kovern-webhook.kovern-system.svc.cluster.local:4318/v1/traces")
+    POD_NAME  = os.environ.get("MY_POD_NAME",  "loop-emitter-unknown")
+    NAMESPACE = os.environ.get("MY_NAMESPACE", "kovern-demo")
+    TOOL      = "check_payment"
+    INTERVAL  = int(os.environ.get("EMIT_INTERVAL", "3"))
+
+    print(f"loop-emitter starting: pod={NAMESPACE}/{POD_NAME} endpoint={OTLP}",
+          flush=True)
+
+    count = 0
+    while True:
+        count += 1
+        ts = str(int(time.time() * 1_000_000_000))
+        payload = {
+            "resourceSpans": [{
+                "resource": {
+                    "attributes": [
+                        {"key": "k8s.namespace.name",
+                         "value": {"stringValue": NAMESPACE}},
+                        {"key": "k8s.pod.name",
+                         "value": {"stringValue": POD_NAME}},
+                        {"key": "service.name",
+                         "value": {"stringValue": "loop-emitter"}}
+                    ]
+                },
+                "scopeSpans": [{
+                    "spans": [{
+                        "name": TOOL,
+                        "startTimeUnixNano": ts,
+                        "endTimeUnixNano":
+                            str(int(time.time() * 1_000_000_000) + 100_000_000),
+                        "attributes": [
+                            {"key": "gen_ai.tool.name",
+                             "value": {"stringValue": TOOL}},
+                            {"key": "gen_ai.tool.result",
+                             "value": {"stringValue":
+                                '{"error":"payment_service_unavailable"}'}}
+                        ]
+                    }]
+                }]
+            }]
+        }
+        data = json.dumps(payload).encode()
+        req = urllib.request.Request(
+            OTLP, data=data,
+            headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                print(f"[{count}] tool={TOOL} -> {resp.status}", flush=True)
+        except urllib.error.URLError as e:
+            print(f"[{count}] send error: {e}", flush=True)
+        time.sleep(INTERVAL)
+---
+# Deployment wrapping the emitter so it restarts after eviction.
+# The kovern.io/scenario: looping label matches billing-agent-loop-guard's selector.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loop-emitter
+  namespace: kovern-demo
+  labels:
+    app: loop-emitter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loop-emitter
+  template:
+    metadata:
+      labels:
+        app: loop-emitter
+        app.kubernetes.io/component: agent
+        kovern.io/governed: "true"
+        kovern.io/scenario: looping
+    spec:
+      containers:
+        - name: emitter
+          image: python:3.12-alpine
+          command: [python3, /scripts/emit.py]
+          env:
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OTLP_ENDPOINT
+              value: "http://kovern-webhook.kovern-system.svc.cluster.local:4318/v1/traces"
+            - name: EMIT_INTERVAL
+              value: "3"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: span-emitter-script

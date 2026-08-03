@@ -1,0 +1,115 @@
+# ── SCENARIO B: BUDGET-EXCEEDED + LOOPING AGENT ──────────────────────────────
+#
+# Demonstrates an agent that has exhausted its budget and is stuck in a loop.
+#
+# Expected outcome:
+#   TokenQuota state:    Exceeded (budget exhausted — see patch command below)
+#   LivelockPolicy:      detection fires when same tool repeats 3× in 30s (Phase 2)
+#   Admission webhook:   new pod creates DENIED ✗
+#
+# Apply:  kubectl apply -f 02-looping-agent.yaml
+#
+# Exhaust the budget manually (for demo):
+#   kubectl patch tq billing-agent-quota -n kovern-demo \
+#     --type=merge --subresource=status \
+#     --patch='{"status":{"spentUSD":"10.50","spentTokens":42000,"runCount":87,"state":"Exceeded"}}'
+#
+# Then try to create a pod — the admission webhook denies it:
+#   kubectl run test-denied --image=busybox --restart=Never \
+#     --overrides='{"spec":{"serviceAccountName":"billing-agent"}}' \
+#     -n kovern-demo -- sleep 5
+#   # Error from server (Forbidden): admission webhook "vpod.kovern.io" denied the request:
+#   # kovern: quota Exceeded for kovern-demo/billing-agent — no new agent runs until renewal
+#
+# Reset the budget:
+#   kubectl patch tq billing-agent-quota -n kovern-demo \
+#     --type=merge --subresource=status \
+#     --patch='{"status":{"spentUSD":"0","spentTokens":0,"runCount":0,"state":"Active"}}'
+# -----------------------------------------------------------------------------
+
+# kagent Agent — billing auditor that simulates retrying a failing payment check.
+# In a real scenario this agent would call check_payment repeatedly, getting the
+# same error each time — a classic livelock pattern.
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: billing-agent
+  namespace: kovern-demo
+  labels:
+    app.kubernetes.io/component: agent
+    kovern.io/governed: "true"
+    kovern.io/team: demo
+    kovern.io/scenario: looping
+spec:
+  type: Declarative
+  declarative:
+    runtime: python
+    modelConfig: default-model-config
+    systemMessage: |
+      You are a billing audit agent for the Plate Platform demo.
+      Your job is to verify payment status for invoices. If a payment check
+      fails, retry immediately until it succeeds. Keep retrying the same
+      check — do not give up.
+    tools: []
+    deployment:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+    a2aConfig:
+      skills:
+        - id: billing-audit
+          name: Billing Audit
+          description: Verify and retry payment status for invoices
+          tags: [billing, payments, audit]
+---
+# TokenQuota — tight $10 daily budget for cost containment.
+# Patch status to Exceeded (see commands above) to trigger webhook enforcement.
+apiVersion: kovern.io/v1alpha1
+kind: TokenQuota
+metadata:
+  name: billing-agent-quota
+  namespace: kovern-demo
+spec:
+  targetRef:
+    kind: ServiceAccount
+    name: billing-agent
+  billingScope:
+    maxFinancialBudget: "10"
+    renewalInterval: Daily
+    softLimitPct: 80
+  enforcementAction: SuspendWorkload
+---
+# LivelockPolicy — tight thresholds: same tool 3× in 30 seconds triggers detection.
+# A billing agent stuck retrying check_payment will exceed this immediately.
+# Remediation: InjectFault (HTTP 429) first, then EvictPod if loop continues.
+apiVersion: kovern.io/v1alpha1
+kind: LivelockPolicy
+metadata:
+  name: billing-agent-loop-guard
+  namespace: kovern-demo
+spec:
+  selector:
+    matchLabels:
+      kovern.io/scenario: looping
+  detection:
+    otel:
+      maxSameToolCalls: 3         # tight: 3 identical calls → livelock
+      windowSeconds: 30           # 30-second rolling window
+      identicalResponseHash: true
+    # semantic:                   # enable for LLM-based detection (Phase 2)
+    #   enabled: true
+    #   provider: Anthropic
+    #   model: claude-haiku-4-5-20251001
+    #   windowTurns: 3
+    #   similarityThreshold: "0.92"
+  remediation:
+    action: InjectFault           # return HTTP 429 first (graceful loop break)
+    faultConfig:
+      httpStatusCode: 429
+      duration: "60s"
+    fallbackAction: EvictPod      # evict if fault injection doesn't stop the loop
+    emitEvent: true               # write K8s Warning Event on detection

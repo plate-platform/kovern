@@ -1,0 +1,24 @@
+# kovern-demo namespace + shared model config for both demo agents.
+# Apply first: kubectl apply -f 00-namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kovern-demo
+  labels:
+    plate.io/managed: "true"
+    plate.io/env: demo
+---
+# ModelConfig — points at the local Ollama instance (llama3.2).
+# kagent looks this up by name within the same namespace.
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: default-model-config
+  namespace: kovern-demo
+spec:
+  provider: Ollama
+  model: llama3.2
+  ollama:
+    host: host.docker.internal:11434
+    options:
+      num_ctx: "64000"

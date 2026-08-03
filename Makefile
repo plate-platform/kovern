@@ -10,7 +10,7 @@ GOVULNCHECK_VERSION ?= latest
         docker-build docker-push \
         helm-install helm-uninstall helm-template \
         generate manifests \
-        run
+        run test-coverage coverage-report coverage-threshold
 
 all: build
 
@@ -24,9 +24,27 @@ test:
 
 ## Run tests with coverage (unit tests only)
 test-coverage:
-	go test ./internal/... -coverprofile=coverage.out
+	go test ./internal/... -coverprofile=coverage.out -v -count=1 -race
 	go tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report: coverage.html"
+	@echo "✓ Coverage report: coverage.html"
+
+## Display coverage percentage in terminal
+coverage-report: test-coverage
+	@echo ""
+	@echo "=== Code Coverage Summary ==="
+	@go tool cover -func=coverage.out | tail -1
+	@echo ""
+
+## Enforce minimum coverage threshold (80%)
+coverage-threshold: coverage-report
+	@coverage=$$(go tool cover -func=coverage.out | tail -1 | awk '{print $$3}' | sed 's/%//'); \
+	threshold=80; \
+	if [ "$$(printf '%.0f' $$coverage)" -lt $$threshold ]; then \
+		echo "❌ Coverage $$coverage% below threshold $$threshold%"; \
+		exit 1; \
+	else \
+		echo "✓ Coverage $$coverage% meets threshold $$threshold%"; \
+	fi
 
 ## Run integration tests with envtest (downloads K8s API server + etcd via setup-envtest)
 test-integration:
