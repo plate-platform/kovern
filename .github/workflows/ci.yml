@@ -46,14 +46,19 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run govulncheck
-        run: |
-          set +e
-          go run golang.org/x/vuln/cmd/govulncheck@latest ./...
-          code=$?
-          # exit 3 = vulns in deps but none called by our code — treat as pass
-          # exit 1 = our code calls vulnerable functions — fail
-          [ $code -eq 0 ] || [ $code -eq 3 ] || exit $code
+        # `go run pkg@latest` does NOT preserve the invoked program's real
+        # exit code — it collapses any non-zero exit to 1. Install the
+        # binary first so $? is accurate.
+        #
+        # govulncheck's actual exit codes (symbol-scan mode, the default):
+        #   0 = no vulnerability in code your program actually calls — pass
+        #   3 = a vulnerable function IS reachable from your code — fail
+        # There is no "harmless" non-zero code; any vulnerability findable
+        # via symbol-level call-graph analysis is one worth fixing.
+        run: govulncheck ./...
 
   helm-validate:
     name: Helm lint + kubeconform
