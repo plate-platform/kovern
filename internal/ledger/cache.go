@@ -7,6 +7,7 @@ package ledger
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -88,6 +89,9 @@ func (c *Cache) Sync(tq *v1alpha1.TokenQuota) {
 		e.State = tq.Status.State
 		e.SpentTokens = tq.Status.SpentTokens
 		e.RunCount = tq.Status.RunCount
+		if spent, err := strconv.ParseFloat(tq.Status.SpentUSD, 64); err == nil {
+			e.SpentUSD = spent
+		}
 	}
 
 	// Sync renewal timestamp so Check can expire it automatically.

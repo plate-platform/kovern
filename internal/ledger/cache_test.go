@@ -78,6 +78,50 @@ func TestSync_SetsExceededState(t *testing.T) {
 	}
 }
 
+func TestSync_RestoresSpentUSDFromStatus(t *testing.T) {
+	// Regression test: Sync restored State/SpentTokens/RunCount from a
+	// TokenQuota's persisted status but silently dropped SpentUSD, so a
+	// fresh cache entry (e.g. after an operator restart, or here via a
+	// manual status patch simulating one) would report $0 spent even
+	// though the CRD's status said otherwise — and the very next
+	// reconcile would then overwrite the real persisted value with that
+	// wrong $0, permanently erasing recorded spend.
+	c := ledger.New()
+	tq := makeQuota("team-a", "agent", "100", 80)
+	tq.Status.State = v1alpha1.QuotaStateExceeded
+	tq.Status.SpentUSD = "42.500000"
+	tq.Status.SpentTokens = 42000
+	tq.Status.RunCount = 87
+	c.Sync(tq)
+
+	e := c.Get("team-a", "agent")
+	if e == nil {
+		t.Fatal("expected entry, got nil")
+	}
+	if e.SpentUSD != 42.5 {
+		t.Fatalf("expected SpentUSD=42.5, got %v", e.SpentUSD)
+	}
+	if e.SpentTokens != 42000 || e.RunCount != 87 {
+		t.Fatalf("expected SpentTokens=42000 RunCount=87, got SpentTokens=%d RunCount=%d", e.SpentTokens, e.RunCount)
+	}
+}
+
+func TestSync_MalformedSpentUSD_LeavesExistingValueUnchanged(t *testing.T) {
+	c := ledger.New()
+	tq := makeQuota("team-a", "agent", "100", 80)
+	tq.Status.State = v1alpha1.QuotaStateActive
+	tq.Status.SpentUSD = "not-a-number"
+	c.Sync(tq)
+
+	e := c.Get("team-a", "agent")
+	if e == nil {
+		t.Fatal("expected entry, got nil")
+	}
+	if e.SpentUSD != 0 {
+		t.Fatalf("expected SpentUSD to stay at zero-value on parse failure, got %v", e.SpentUSD)
+	}
+}
+
 func TestSync_DefaultSoftLimitPct(t *testing.T) {
 	c := ledger.New()
 	tq := makeQuota("team-a", "agent", "100", 0) // 0 → default 80
