@@ -4,7 +4,8 @@
 //   - TokenQuota reconciler (quota ledger sync + renewal)
 //   - LivelockPolicy reconciler (loop detection config watcher)
 //   - ValidatingAdmissionWebhook for Pod CREATE (quota enforcement)
-//   - OTLP/HTTP receiver on :4318 (span ingestion for heuristic detection)
+//   - OTLP/HTTP receiver on :4318 (span ingestion for heuristic detection
+//     and TokenQuota spend recording)
 //   - Heuristic engine (evaluates LivelockPolicies against the SpanStore)
 package main
 
@@ -30,6 +31,7 @@ import (
 	"github.com/plate-platform/kovern/internal/heuristic"
 	"github.com/plate-platform/kovern/internal/ledger"
 	"github.com/plate-platform/kovern/internal/otelreceiver"
+	"github.com/plate-platform/kovern/internal/pricing"
 	"github.com/plate-platform/kovern/internal/remediation"
 	admissionwebhook "github.com/plate-platform/kovern/internal/webhook"
 )
@@ -133,7 +135,12 @@ func main() {
 
 	// Start the OTLP/HTTP receiver as a plain HTTP server (no TLS — internal cluster traffic only).
 	otlpMux := http.NewServeMux()
-	otlpMux.Handle("/v1/traces", &otelreceiver.Handler{Store: spanStore})
+	otlpMux.Handle("/v1/traces", &otelreceiver.Handler{
+		Store:         spanStore,
+		Cache:         cache,
+		CostEstimator: pricing.NewDefaultEstimator(),
+		Logger:        logger.WithName("otelreceiver"),
+	})
 	otlpServer := &http.Server{
 		Addr:    otlpAddr,
 		Handler: otlpMux,
