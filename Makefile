@@ -98,8 +98,10 @@ scan-helm:
 
 ## Validate rendered Helm templates against Kubernetes JSON schemas (requires: brew install kubeconform)
 helm-validate:
+	# -skip CustomResourceDefinition: upstream schema catalog doesn't publish
+	# a schema for the CRD kind itself — see ci.yml for details.
 	helm template $(HELM_RELEASE) charts/kovern/ | \
-		kubeconform -strict -kubernetes-version 1.29.0 -summary
+		kubeconform -strict -kubernetes-version 1.29.0 -summary -skip CustomResourceDefinition
 
 ## Run all security checks: lint + vuln + filesystem scan + helm-validate
 security:
