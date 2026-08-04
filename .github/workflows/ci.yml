@@ -72,8 +72,15 @@ jobs:
         run: helm lint charts/kovern/
       - name: kubeconform
         run: |
+          # -skip CustomResourceDefinition: the upstream schema catalog
+          # (yannh/kubernetes-json-schema) doesn't publish a schema for the
+          # CustomResourceDefinition kind itself (only its sub-fields, e.g.
+          # customresourcedefinitionstatus) — a known gap, confirmed across
+          # both v1.29.0 and master. The K8s API server validates CRD
+          # manifests on apply regardless; this just stops kubeconform from
+          # erroring on a schema that was never going to exist.
           helm template kovern charts/kovern/ | \
-            kubeconform -strict -kubernetes-version 1.29.0 -summary
+            kubeconform -strict -kubernetes-version 1.29.0 -summary -skip CustomResourceDefinition
 
   build:
     name: Docker build
