@@ -79,10 +79,9 @@ dev-setup:
 	@which kubeconform > /dev/null 2>&1 && echo "  already installed" || brew install kubeconform
 	@echo "==> All tools ready."
 
-## Scan Go source for known vulnerabilities (exit 3 = unused vulns, not a failure)
+## Scan Go source for known vulnerabilities (fails if a vulnerable function is actually reachable from our code)
 vuln:
-	govulncheck ./...; \
-	code=$$?; [ $$code -eq 0 ] || [ $$code -eq 3 ] || exit $$code
+	govulncheck ./...
 
 ## Trivy: scan filesystem for secrets, misconfigurations, and vulnerabilities
 scan-fs:
