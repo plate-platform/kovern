@@ -37,16 +37,23 @@ Agent pod create
 └─────────────────────────┘
 
 Agent pod running
-      │  (emits OTLP spans)
+      │  (POSTs OTLP/HTTP JSON spans directly — no Collector hop)
       ▼
-OTel Collector → Kovern telemetry consumer
+┌─────────────────────────┐
+│  Kovern OTLP receiver   │  :4318  POST /v1/traces
+│                         │
+│  gen_ai.tool.name       │──▶ SpanStore ──▶ heuristic engine ──▶ LivelockPolicy detection
+│  gen_ai.usage.*         │──▶ pricing.Estimator ──▶ ledger.Cache.RecordSpend (immediate)
+└─────────────────────────┘
                         │
                         ▼
-             TokenQuota.status.spentUSD  (patched after each span batch)
-             LivelockPolicy detection    (heuristic: same tool N× in window)
+             TokenQuota.status.spentUSD  (reflects the ledger on the next
+                                          reconcile, ≤5 min — enforcement
+                                          above is real-time; this is a
+                                          display lag, not an enforcement lag)
 ```
 
-The ledger cache is synced from `TokenQuota.status` on every reconcile. The webhook reads exclusively from the cache — no Kubernetes API calls on the admission hot path.
+The ledger cache is synced from `TokenQuota.status` on every reconcile. The webhook reads exclusively from the cache — no Kubernetes API calls on the admission hot path. Spend recording requires the agent's OTLP export to include a `k8s.serviceaccount.name` resource attribute (see "Cost tracking" below) — without it, spans still feed loop detection but can't be attributed to a budget.
 
 ---
 
@@ -131,6 +138,23 @@ kubectl get tq -A
 # billing-agent-quota    Active   12.40     50       Monthly   3d
 ```
 
+**Cost tracking** — `spentUSD`/`spentTokens` are populated automatically from OTLP spans
+the agent exports to Kovern's receiver (`http://<kovern-service>:4318/v1/traces`), no
+manual patching required. For a span to count against a budget it needs:
+
+| Attribute | Level | Purpose |
+|---|---|---|
+| `k8s.namespace.name` | resource | which namespace |
+| `k8s.serviceaccount.name` | resource | which `TokenQuota` to charge (ledger key is namespace+ServiceAccount, not namespace+pod) |
+| `gen_ai.request.model` | span | matched against `internal/pricing`'s glob price table to estimate USD cost |
+| `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` | span | token counts (OTel GenAI semantic conventions) |
+
+A model with no matching price entry still gets billed at a conservative fallback rate
+(not $0) — check operator logs at `-v=1` for `no price entry for model` if costs look
+off for a given model, then add it to the price table (`internal/pricing.DefaultPrices`).
+Missing `k8s.serviceaccount.name` means the span still feeds loop detection below, it
+just can't be attributed to a budget.
+
 ### LivelockPolicy
 
 Detects agents stuck in behavioral loops and applies a configurable remedy.
@@ -156,7 +180,11 @@ spec:
     #   similarityThreshold: "0.92"
     #   model: claude-haiku-4-5-20251001
   remediation:
-    action: InjectFault         # InjectFault | EvictPod | SuspendWorkload
+    # InjectFault | EvictPod | SuspendWorkload — InjectFault isn't implemented
+    # yet (needs a sidecar/service mesh) and falls straight through to
+    # fallbackAction; faultConfig is inert until it is. Set EvictPod or
+    # SuspendWorkload directly if you don't want to depend on the fallback.
+    action: InjectFault
     faultConfig:
       httpStatusCode: 429
       duration: "60s"
@@ -306,11 +334,19 @@ kovern/
 │   │   └── admission.go          ValidatingAdmissionWebhook — reads ledger, denies/warns
 │   ├── controller/
 │   │   ├── tokenquota_controller.go      reconciles TokenQuota, drives renewal, syncs ledger
-│   │   └── livelockpolicy_controller.go  reconciles LivelockPolicy (Phase 2: detection engine)
-│   └── claude/
-│       └── detector.go           Detector interface + AnthropicDetector + NoOpDetector
+│   │   └── livelockpolicy_controller.go  reconciles LivelockPolicy (detection engine runs alongside, see internal/heuristic/)
+│   ├── otelreceiver/
+│   │   └── receiver.go           OTLP/HTTP span receiver — tool-call recording + GenAI usage parsing → ledger.RecordSpend
+│   ├── pricing/
+│   │   └── pricing.go            model name → USD cost estimation (glob-matched price table)
+│   ├── heuristic/
+│   │   └── engine.go             non-LLM loop detection (same tool N× in a window)
+│   ├── detector/
+│   │   └── detector.go           semantic loop detection — Claude/Gemini (interface + real impls)
+│   └── remediation/
+│       └── executor.go           fault injection / pod eviction / workload suspension
 ├── charts/kovern/                Helm chart (CRDs, Deployment, RBAC, WebhookConfiguration)
-├── docs/adr/                     Architecture Decision Records
+├── docs/                         roadmap, dev guide, why-kovern, ADRs — see docs/README.md
 └── hack/
     ├── gen-certs.sh              self-signed cert generation for local dev
     └── gen-local-values.sh       generate Helm values for local cluster deploy
@@ -323,7 +359,18 @@ Key design invariants:
 
 ---
 
-## Architecture Decision Records
+## Documentation
+
+| Doc | What it's for |
+|---|---|
+| [docs/roadmap.md](docs/roadmap.md) | Current phase status — what's built vs. planned |
+| [docs/why-kovern.md](docs/why-kovern.md) | Problem statement and walkthrough scenarios |
+| [docs/development.md](docs/development.md) | Local dev setup, tests, lint/security tooling |
+| [docs/adr/](docs/adr/) | Architecture Decision Records (below) |
+
+See [docs/README.md](docs/README.md) for the full index.
+
+### Architecture Decision Records
 
 | ADR | Decision |
 |---|---|

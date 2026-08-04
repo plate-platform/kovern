@@ -18,10 +18,15 @@ kovern/
 ├── api/v1alpha1/           CRD types (TokenQuota, LivelockPolicy)
 ├── cmd/main.go             Operator entry point
 ├── internal/
-│   ├── claude/             Anthropic semantic detector (interface + real impl)
 │   ├── controller/         TokenQuota + LivelockPolicy reconcilers
 │   ├── ledger/             In-memory quota ledger (webhook reads this, not K8s API)
-│   └── webhook/            ValidatingAdmissionWebhook handler
+│   ├── webhook/            ValidatingAdmissionWebhook handler
+│   ├── otelreceiver/       OTLP/HTTP span receiver — tool-call recording (loop
+│   │                       detection) + GenAI usage parsing → pricing → ledger.RecordSpend
+│   ├── pricing/            Model-name → USD cost estimation (glob-matched price table)
+│   ├── heuristic/          Non-LLM loop detection (same tool N× in a window)
+│   ├── detector/           Semantic loop detection — Claude/Gemini (interface + real impls)
+│   └── remediation/        Fault injection / pod eviction / workload suspension
 ├── charts/kovern/          Helm chart (CRDs, Deployment, RBAC, WebhookConfiguration)
 ├── docs/adr/               Architecture Decision Records
 └── .claude/agents/         Agent role definitions
