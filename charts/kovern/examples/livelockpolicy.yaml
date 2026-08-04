@@ -21,10 +21,14 @@ spec:
     #   similarityThreshold: "0.92"
     #   model: claude-haiku-4-5-20251001
   remediation:
-    action: InjectFault        # Return HTTP 429 first (graceful loop break)
-    faultConfig:
+    # InjectFault (graceful HTTP 429 backoff) is not implemented yet — it
+    # falls straight through to fallbackAction below (see
+    # internal/remediation/executor.go). Set action: EvictPod or
+    # SuspendWorkload directly if you don't want to rely on the fallback.
+    action: InjectFault
+    faultConfig:               # inert until InjectFault is implemented
       httpStatusCode: 429
       duration: "60s"
-    fallbackAction: EvictPod   # Evict if fault injection doesn't stop the loop
+    fallbackAction: EvictPod   # this is what actually runs today
     emitEvent: true            # Write a K8s Warning Event on detection
-    gitopsIncident: false
+    gitopsIncident: false      # inert — no GitOps integration yet (see roadmap.md Phase 5)

@@ -1,14 +1,15 @@
 // Package remediation implements the actions taken when a livelock is detected.
 //
 // Supported actions (matching RemediationAction in the API types):
-//   EvictPod         — deletes the pod immediately (force, grace period 0)
-//   SuspendWorkload  — scales the owning Deployment to 0 replicas
-//   InjectFault      — not yet implemented; falls through to the fallback action
+//
+//	EvictPod         — deletes the pod immediately (force, grace period 0)
+//	SuspendWorkload  — scales the owning Deployment to 0 replicas
+//	InjectFault      — not yet implemented; falls through to the fallback action
 //
 // After applying an action the executor:
-//   1. Emits a Kubernetes Warning Event on the LivelockPolicy
-//   2. Increments LivelockPolicy.status.detectionCount
-//   3. Records LivelockPolicy.status.lastDetection and lastAffectedPod
+//  1. Emits a Kubernetes Warning Event on the LivelockPolicy
+//  2. Increments LivelockPolicy.status.detectionCount
+//  3. Records LivelockPolicy.status.lastDetection and lastAffectedPod
 package remediation
 
 import (
@@ -38,6 +39,12 @@ func (e *Executor) Remediate(ctx context.Context, pod *corev1.Pod, policy *v1alp
 	logger := ctrl.Log.WithName("remediation")
 
 	action := policy.Spec.Remediation.Action
+	// appliedAction is what actually ran — distinct from action whenever
+	// InjectFault falls through to the fallback (see below). The Event
+	// message must report this, not the configured action, or an operator
+	// reading `kubectl get events` sees "applied InjectFault" for a pod that
+	// was actually evicted.
+	appliedAction := action
 
 	var actionErr error
 	switch action {
@@ -45,7 +52,7 @@ func (e *Executor) Remediate(ctx context.Context, pod *corev1.Pod, policy *v1alp
 		actionErr = e.evictPod(ctx, pod)
 
 	case v1alpha1.RemediationSuspendWorkload:
-		actionErr = e.suspendWorkload(ctx, pod)
+		appliedAction, actionErr = e.suspendWorkload(ctx, pod)
 
 	case v1alpha1.RemediationInjectFault:
 		// InjectFault requires a sidecar or service mesh — not yet implemented.
@@ -55,19 +62,21 @@ func (e *Executor) Remediate(ctx context.Context, pod *corev1.Pod, policy *v1alp
 			"pod", pod.Name,
 		)
 		if policy.Spec.Remediation.FallbackAction == v1alpha1.RemediationSuspendWorkload {
-			actionErr = e.suspendWorkload(ctx, pod)
+			appliedAction, actionErr = e.suspendWorkload(ctx, pod)
 		} else {
+			appliedAction = v1alpha1.RemediationEvictPod
 			actionErr = e.evictPod(ctx, pod)
 		}
 
 	default:
+		appliedAction = v1alpha1.RemediationEvictPod
 		actionErr = e.evictPod(ctx, pod)
 	}
 
 	// Emit event and update status regardless of action success.
 	if policy.Spec.Remediation.EmitEvent {
 		e.Recorder.Eventf(policy, corev1.EventTypeWarning, "LivelockDetected",
-			"livelock detected on pod %s/%s — applied %s", pod.Namespace, pod.Name, action)
+			"livelock detected on pod %s/%s — applied %s", pod.Namespace, pod.Name, appliedAction)
 	}
 
 	if err := e.updateStatus(ctx, policy, pod.Name); err != nil {
@@ -88,7 +97,12 @@ func (e *Executor) evictPod(ctx context.Context, pod *corev1.Pod) error {
 
 // suspendWorkload scales the Deployment that owns pod to zero replicas.
 // Walk: Pod → ReplicaSet (owner ref) → Deployment (owner ref).
-func (e *Executor) suspendWorkload(ctx context.Context, pod *corev1.Pod) error {
+//
+// It returns the action actually taken, not just an error: when no
+// ReplicaSet/Deployment owner chain exists it degrades to EvictPod instead —
+// callers must use this return value (not assume SuspendWorkload happened)
+// when reporting what was applied, e.g. in the LivelockDetected Event.
+func (e *Executor) suspendWorkload(ctx context.Context, pod *corev1.Pod) (v1alpha1.RemediationAction, error) {
 	logger := ctrl.Log.WithName("remediation")
 
 	rsName := ""
@@ -100,12 +114,12 @@ func (e *Executor) suspendWorkload(ctx context.Context, pod *corev1.Pod) error {
 	}
 	if rsName == "" {
 		logger.Info("pod has no ReplicaSet owner, falling back to eviction", "pod", pod.Name)
-		return e.evictPod(ctx, pod)
+		return v1alpha1.RemediationEvictPod, e.evictPod(ctx, pod)
 	}
 
 	rs := &appsv1.ReplicaSet{}
 	if err := e.Client.Get(ctx, types.NamespacedName{Namespace: pod.Namespace, Name: rsName}, rs); err != nil {
-		return fmt.Errorf("get replicaset %s: %w", rsName, err)
+		return v1alpha1.RemediationSuspendWorkload, fmt.Errorf("get replicaset %s: %w", rsName, err)
 	}
 
 	deployName := ""
@@ -118,18 +132,18 @@ func (e *Executor) suspendWorkload(ctx context.Context, pod *corev1.Pod) error {
 	if deployName == "" {
 		logger.Info("replicaset has no Deployment owner, falling back to eviction",
 			"rs", rsName, "pod", pod.Name)
-		return e.evictPod(ctx, pod)
+		return v1alpha1.RemediationEvictPod, e.evictPod(ctx, pod)
 	}
 
 	deploy := &appsv1.Deployment{}
 	if err := e.Client.Get(ctx, types.NamespacedName{Namespace: pod.Namespace, Name: deployName}, deploy); err != nil {
-		return fmt.Errorf("get deployment %s: %w", deployName, err)
+		return v1alpha1.RemediationSuspendWorkload, fmt.Errorf("get deployment %s: %w", deployName, err)
 	}
 
 	zero := int32(0)
 	deploy.Spec.Replicas = &zero
 	logger.Info("scaling deployment to zero", "deployment", deployName, "namespace", pod.Namespace)
-	return e.Client.Update(ctx, deploy)
+	return v1alpha1.RemediationSuspendWorkload, e.Client.Update(ctx, deploy)
 }
 
 func (e *Executor) updateStatus(ctx context.Context, policy *v1alpha1.LivelockPolicy, podName string) error {

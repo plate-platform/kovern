@@ -46,6 +46,15 @@ Detects and remediates runaway agent loops using OpenTelemetry spans and simple 
 - **Heuristic Engine** — polls policies, counts identical tool calls in rolling windows
 - **Detection Trigger** — "same tool called N times in M seconds → livelock detected"
 - **Cooldown Mechanism** — 2-minute window prevents duplicate remediation on same pod
+- **Cost/Spend Ingestion** (`internal/pricing`) — the OTLP receiver reads
+  `gen_ai.usage.input_tokens`/`output_tokens` + `gen_ai.request.model` off
+  each span and `k8s.serviceaccount.name` off the resource, estimates USD
+  cost via a glob-matched price table, and calls `ledger.Cache.RecordSpend`.
+  This closes the gap where `TokenQuota.status` could previously only move
+  via manual `kubectl patch --subresource=status` — real spend now flows
+  into the same ledger the admission webhook enforces against. Unmatched
+  models use a conservative fallback rate (logged at V(1)) rather than
+  costing $0, so an unpriced model can't silently bypass budget enforcement.
 
 ### Remediation Actions:
 - **EvictPod** — force delete pod (grace period 0), pod restarts automatically
@@ -203,15 +212,17 @@ Support Kovern across multiple Kubernetes clusters with shared governance.
 
 ### Immediate Priorities:
 1. **Phase 3 Implementation** — finish Claude semantic detector (interface + E2E test)
-2. **Test Coverage** — expand integration tests for otelreceiver + remediation packages
+2. **Test Coverage** — `otelreceiver` and `pricing` now have unit coverage; `remediation` still has none
 3. **Observability** — add Prometheus metrics for budget usage + loop detection rate
 4. **Documentation** — operator runbooks, troubleshooting guides
 
 ### Testing & Quality:
 - ✅ Unit tests for heuristic engine (88% coverage)
+- ✅ Unit tests for otelreceiver (tool-call recording + cost/spend recording) and pricing
 - ✅ Integration tests for admission webhook
 - ⏳ E2E tests with real Ollama agents (planned)
 - ⏳ Load tests for admission webhook throughput
+- ⏳ Unit tests for remediation package (still none)
 
 ### Roadmap Dependencies:
 | Phase | Depends On | Status |

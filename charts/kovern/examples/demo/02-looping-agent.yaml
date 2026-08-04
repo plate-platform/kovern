@@ -85,7 +85,8 @@ spec:
 ---
 # LivelockPolicy — tight thresholds: same tool 3× in 30 seconds triggers detection.
 # A billing agent stuck retrying check_payment will exceed this immediately.
-# Remediation: InjectFault (HTTP 429) first, then EvictPod if loop continues.
+# Remediation: configured as InjectFault -> EvictPod, but InjectFault isn't
+# implemented yet, so what actually happens is an immediate EvictPod.
 apiVersion: kovern.io/v1alpha1
 kind: LivelockPolicy
 metadata:
@@ -107,7 +108,7 @@ spec:
     #   windowTurns: 3
     #   similarityThreshold: "0.92"
   remediation:
-    action: InjectFault           # return HTTP 429 first (graceful loop break)
+    action: InjectFault           # not implemented — falls straight through to fallbackAction below
     faultConfig:
       httpStatusCode: 429
       duration: "60s"

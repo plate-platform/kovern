@@ -2,6 +2,14 @@
 
 AI agents on Kubernetes have two critical failure modes that silently drain your budget and disrupt service. Kovern prevents both.
 
+> **Note on scenarios below**: budget enforcement (Problem 1) is real and works
+> as described. In the loop-detection walkthroughs (Problem 2, Scenario 3),
+> `InjectFault`/"HTTP 429 graceful backoff" is not implemented yet — it falls
+> straight through to an immediate `EvictPod`/`SuspendWorkload` (see
+> `internal/remediation/executor.go`), and PagerDuty/Slack alerting doesn't
+> exist yet either (Warning Events do — see `docs/roadmap.md` Phase 5). Read
+> those parts as the intended experience, not the current one.
+
 ## Problem 1: Budget Overruns
 
 **The situation:**
@@ -259,7 +267,7 @@ spec:
       maxSameToolCalls: 3
       windowSeconds: 60
   remediation:
-    action: InjectFault    # return HTTP 429 (graceful backoff)
+    action: InjectFault    # not implemented — falls straight through to fallbackAction below
     faultConfig:
       httpStatusCode: 429
       duration: "60s"
