@@ -68,7 +68,14 @@ func (c *Cache) Sync(tq *v1alpha1.TokenQuota) {
 
 	k := key(tq.Namespace, tq.Spec.TargetRef.Name)
 
-	maxUSD, _ := tq.Spec.BillingScope.MaxFinancialBudget.AsInt64()
+	// AsInt64() only succeeds for whole-number quantities — it returns
+	// (0, false) for any fractional budget like "0.50" or "9.99", which a
+	// naive `maxUSD, _ := ...AsInt64()` would silently turn into MaxUSD=0.
+	// computeState treats MaxUSD<=0 as "no budget configured" and never
+	// flags Exceeded, so that used to mean any non-whole-dollar TokenQuota
+	// silently had NO enforcement at all. AsApproximateFloat64() handles
+	// both integer and fractional values correctly.
+	maxUSD := tq.Spec.BillingScope.MaxFinancialBudget.AsApproximateFloat64()
 
 	e, exists := c.entries[k]
 	if !exists {
@@ -76,7 +83,7 @@ func (c *Cache) Sync(tq *v1alpha1.TokenQuota) {
 		c.entries[k] = e
 	}
 
-	e.MaxUSD = float64(maxUSD)
+	e.MaxUSD = maxUSD
 	e.SoftLimitPct = tq.Spec.BillingScope.SoftLimitPct
 	if e.SoftLimitPct == 0 {
 		e.SoftLimitPct = 80

@@ -78,6 +78,45 @@ func TestSync_SetsExceededState(t *testing.T) {
 	}
 }
 
+func TestSync_FractionalBudget_LoadsCorrectMaxUSD(t *testing.T) {
+	// Regression test: resource.Quantity.AsInt64() only succeeds for
+	// whole-number values — it silently returns (0, false) for "0.50" or
+	// any other fractional-dollar budget. Sync used to discard that `ok`
+	// via `maxUSD, _ := ...AsInt64()`, so MaxUSD ended up 0 for any
+	// non-whole-dollar TokenQuota. computeState treats MaxUSD<=0 as "no
+	// budget configured" and never returns Exceeded — meaning a $0.50 (or
+	// $9.99, or any other realistic cents-denominated) budget silently had
+	// zero enforcement. Reproduced live against a real cluster before
+	// fixing: a TokenQuota with maxFinancialBudget "0.50" let spend run
+	// past $0.50 without ever flipping to Exceeded.
+	c := ledger.New()
+	tq := makeQuota("team-a", "agent", "0.50", 80)
+	c.Sync(tq)
+
+	e := c.Get("team-a", "agent")
+	if e == nil {
+		t.Fatal("expected entry, got nil")
+	}
+	if e.MaxUSD != 0.5 {
+		t.Fatalf("expected MaxUSD=0.5, got %v", e.MaxUSD)
+	}
+}
+
+func TestRecordSpend_FractionalBudget_FlipsToExceeded(t *testing.T) {
+	c := ledger.New()
+	tq := makeQuota("team-a", "agent", "0.50", 80)
+	tq.Status.State = v1alpha1.QuotaStateActive
+	c.Sync(tq)
+
+	state, err := c.RecordSpend("team-a", "agent", 0.51, 50000)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if state != v1alpha1.QuotaStateExceeded {
+		t.Fatalf("expected Exceeded after $0.51 spend against a $0.50 budget, got %s", state)
+	}
+}
+
 func TestSync_DefaultSoftLimitPct(t *testing.T) {
 	c := ledger.New()
 	tq := makeQuota("team-a", "agent", "100", 0) // 0 → default 80
