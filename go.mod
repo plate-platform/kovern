@@ -3,7 +3,7 @@ module github.com/plate-platform/kovern
 go 1.26.5
 
 require (
-	github.com/anthropics/anthropic-sdk-go v1.61.0
+	github.com/anthropics/anthropic-sdk-go v1.62.0
 	github.com/go-logr/logr v1.4.3
 	google.golang.org/genai v1.66.0
 	k8s.io/api v0.36.3
