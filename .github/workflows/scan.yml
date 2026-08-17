@@ -25,7 +25,7 @@ jobs:
           format: sarif
           output: trivy-fs.sarif
       - name: Upload SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4.37.4
+        uses: github/codeql-action/upload-sarif@v4.37.7
         if: always()
         with:
           sarif_file: trivy-fs.sarif
@@ -51,7 +51,7 @@ jobs:
           format: sarif
           output: trivy-image.sarif
       - name: Upload SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4.37.4
+        uses: github/codeql-action/upload-sarif@v4.37.7
         if: always()
         with:
           sarif_file: trivy-image.sarif

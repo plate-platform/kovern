@@ -57,7 +57,7 @@ jobs:
           output: trivy-release.sarif
 
       - name: Upload scan SARIF
-        uses: github/codeql-action/upload-sarif@v4.37.4
+        uses: github/codeql-action/upload-sarif@v4.37.7
         if: always()
         with:
           sarif_file: trivy-release.sarif
